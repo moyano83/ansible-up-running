@@ -63,7 +63,7 @@ Vagrant has built-in support for provisioning virtual machines with Ansible, Vag
 #### Telling Ansible About Your Test Server
 
 Ansible can manage only the servers it explicitly knows about. You provide Ansible with information about servers by specifying them in an inventory
-file and add the information about your servers there. You can test the connectivity to a server using the ping module 
+file and add the information about your servers there. You can test the connectivity to a server using the ping module
 `ansible testserver -i hosts -m ping`
 
 ### Simplifying with the ansible.cfg File
@@ -85,6 +85,59 @@ private_key_file = .vagrant/machines/default/virtualbox/private_key
 host_key_checking = False
 ```
 
-You can execute arbitrary commands with the command module (default module for ansible). When invoking this module, you also need to pass an 
-argument to the module with the _-a_ flag, which is the command to run `ansible testserver -m command -a uptime` or 
+You can execute arbitrary commands with the command module (default module for ansible). When invoking this module, you also need to pass an argument
+to the module with the _-a_ flag, which is the command to run `ansible testserver -m command -a uptime` or
 `ansible testserver -a "tail /var/log/dmesg"`. Use the _-b_ flag to execute the command as root.
+
+## Chapter 2: Playbooks: A Beginning<a name="Chapter2"></a>
+
+A playbook is the term that Ansible uses for a configuration management script.
+
+### Playbooks Are YAML
+
+Ansible playbooks are written in YAML syntax. YAML is a file format similar in intent to JSON, but generally easier for humans to read and write. YAML
+files are supposed to start with three dashes (---) to indicate the beginning of the document but it is not required. Comments start with '#' and in
+general, YAML strings don’t have to be quoted, although you can quote them if you prefer. YAML lists are like arrays in JSON and Ruby, or lists in
+Python, they are delimited with hyphens. YAML dictionaries are like objects in JSON, dictionaries in Python, or hashes in Ruby.
+
+When writing playbooks, you might want to break this up across multiple lines in your file, but you want Ansible to treat the string as if it were a
+single line. You can do this with YAML by using line folding with the greater than `>` character. The YAML parser will replace line breaks with
+spaces.
+
+### Anatomy of a Playbook
+
+A playbook is a list of dictionaries. Specifically, a playbook is a list of plays. Every play must contain the following:
+
+    * A set of hosts to configure
+    * A list of tasks to be executed on those hosts
+
+Along with this, a play commonly has a `name` (describes what the plays does), `become` (If true, Ansible will run every task by becoming root)
+and `vars` (list of variables to use).
+
+A play is formed by tasks, and you can use the `--start-at-task <task name>` flag to tell ansible-playbook to start a playbook in the middle of a
+play. Every task must contain a key with the name of a module and a value with the arguments to that module. Modules are scripts that come packaged
+with Ansible and perform some kind of action on a host (like `apt`, `copy`, `file` or `service`). Ansible ships with the `ansible-doc` command-line
+tool, which shows documentation about modules, it can be run like `ansible-doc <module>`.
+
+#### Did Anything Change? Tracking Host State
+
+Ansible modules will first check to see whether the state of the host needs to be changed before taking any action. If the state of the host matches
+the arguments of the module, Ansible takes no action on the host and responds with a state of ok.
+
+#### Variables
+
+Any valid YAML can be used as the value of a variable, including lists and dictionaries. You reference variables by using the {{ braces }} notation.
+Ansible replaces these braces with the value of the variable. If you reference a variable right after specifying the module, the YAML parser will
+misinterpret the variable reference as the beginning of an inline dictionary and you need to quote it.
+
+### Templating
+
+Ansible uses the Jinja2 template engine to implement templating. We use the .j2 extension to indicate that the file is a Jinja2 template. Ansible also
+uses the Jinja2 template engine to evaluate variables in playbooks.
+
+### Handlers
+
+Handlers are one of the conditional forms that Ansible supports. A handler is similar to a task, but it runs only if it has been notified by a task. A
+task will fire the notification if Ansible recognizes that the task has changed the state of the system. Handlers usually run after all of the tasks
+are run at the end of the play. They run only once, even if they are notified multiple times. If a play contains multiple handlers, the handlers
+always run in the order that they are defined in the handlers section, not the notification order.
