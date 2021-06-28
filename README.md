@@ -32,23 +32,23 @@ exposes a domain-specific language (DSL) that you use to describe the state of y
 ### How Ansible Works
 
 In Ansible, a script is called a playbook. A playbook describes which hosts (what Ansible calls remote servers) to configure, and an ordered list of
-tasks to perform on those hosts. It’s important to note the following:
+tasks to perform on those hosts. It's important to note the following:
 
     * Ansible runs each task in parallel across all hosts
     * Ansible waits until all hosts have completed a task before moving to the next task
     * Ansible runs the tasks in the order that you specify them
 
-### What’s So Great About Ansible?
+### What's So Great About Ansible?
 
-    * Ansible’s playbook syntax is built on top of YAML, which is a human friendly data format language
-    * There’s no need to preinstall an agent or any other software on the host
+    * Ansible's playbook syntax is built on top of YAML, which is a human friendly data format language
+    * There's no need to preinstall an agent or any other software on the host
     * Ansible is push based by default, so you control when the changes happen to the servers, althought ansible has official support for pull 
       mode, using a tool it ships with called ansible-pull
     * Ansible Scales Down, it is easy to configure a single node
     * Ansible modules are declarative; you use them to describe the state you want the server to be in. Ansible comes with a large collection of 
       modules it ships with, and modules are idempotent
     * Ansible does not provide a layer of abstraction so that you can use the same configuration management scripts to manage servers running 
-      different operating systems, ansible playbooks aren’t really intended to be reused across different contexts
+      different operating systems, ansible playbooks aren't really intended to be reused across different contexts
 
 ### Installing Ansible
 
@@ -97,7 +97,7 @@ A playbook is the term that Ansible uses for a configuration management script.
 
 Ansible playbooks are written in YAML syntax. YAML is a file format similar in intent to JSON, but generally easier for humans to read and write. YAML
 files are supposed to start with three dashes (---) to indicate the beginning of the document but it is not required. Comments start with '#' and in
-general, YAML strings don’t have to be quoted, although you can quote them if you prefer. YAML lists are like arrays in JSON and Ruby, or lists in
+general, YAML strings don't have to be quoted, although you can quote them if you prefer. YAML lists are like arrays in JSON and Ruby, or lists in
 Python, they are delimited with hyphens. YAML dictionaries are like objects in JSON, dictionaries in Python, or hashes in Ruby.
 
 When writing playbooks, you might want to break this up across multiple lines in your file, but you want Ansible to treat the string as if it were a
@@ -245,7 +245,7 @@ _./group\_vars/production_. Here, _production_ can be a YAML file with the varia
 ### Dynamic Inventory
 
 You might have a system external to Ansible that keeps track of your hosts (Amazon EC2, tracks information about your hosts for you, and you can
-retrieve this information through EC2’s web interface). If your inventory file is an executable, Ansible will assume it is a dynamic inventory script
+retrieve this information through EC2's web interface). If your inventory file is an executable, Ansible will assume it is a dynamic inventory script
 and will execute the file instead of reading it.
 
 #### The Interface for a Dynamic Inventory Script
@@ -278,7 +278,7 @@ Ansible will let you add hosts and groups to the inventory during the execution 
 
 ##### add_host
 
-The _add_host_ module adds a host to the inventory. This module is useful if you’re using Ansible to provision new virtual machine instances inside an
+The _add_host_ module adds a host to the inventory. This module is useful if you're using Ansible to provision new virtual machine instances inside an
 infrastructure-as-a-service cloud (useful for scenarios where you start up new virtual machine instances and configure them in the same playbook).
 
 ##### group_by
@@ -322,11 +322,11 @@ vars_files:
   - file_in_the_same_folder.yml
 ```
 
-For debugging, it’s often handy to be able to view the output of a variable. You can use the following: `- debug: var=myvarname`.
+For debugging, it's often handy to be able to view the output of a variable. You can use the following: `- debug: var=myvarname`.
 
 ### Registering Variables
 
-Often, you’ll find that you need to set the value of a variable based on the result of a task. To do so, we create a registered variable using the
+Often, you'll find that you need to set the value of a variable based on the result of a task. To do so, we create a registered variable using the
 register clause when invoking a module:
 
 ```yaml
@@ -338,7 +338,7 @@ register clause when invoking a module:
 The value of a variable set using the register clause is always a dictionary, but the specific keys of the dictionary are different depending on the
 module that was invoked. If a variable contains a dictionary, you can access the keys of the dictionary by using either a dot (.) or a subscript ([]).
 The simplest way to find out what a module returns is to register a variable and then output that variable with the debug module. If the task fails,
-Ansible will stop executing tasks for the failed host. We can use the _ignore\_errors_ clause.
+Ansible will stop executing tasks for the failed host. We can use the _ignore\_errors_ clause to change this behaviour.
 
 ### Facts
 
@@ -354,9 +354,9 @@ variable. You can get those like in the example below:
        - debug: var=ansible_distribution
 ```
 
-Ansible implements fact collecting through the use of a special module called the setup module. You don’t need to call this module in your playbooks
+Ansible implements fact collecting through the use of a special module called the setup module. You don't need to call this module in your playbooks
 because Ansible does that automatically when it gathers facts. Because Ansible collects many facts, the setup module supports a filter parameter that
-lets you filter by fact name by specifying a glob.1 For example: `ansible web -m setup -a 'filter=ansible_eth*'`. The output is a dictionary whose key
+lets you filter by fact name by specifying a glob. For example: `ansible web -m setup -a 'filter=ansible_eth*'`. The output is a dictionary whose key
 is _ansible\_facts_.
 
 #### Local Facts
@@ -364,7 +364,7 @@ is _ansible\_facts_.
 Ansible provides an additional mechanism for associating facts with a host. You can place one or more files on the remote host machine in the
 _/etc/ansible/facts.d_ directory. Ansible will recognize the file if it's any of the following:
 
-    * In.iniformat 
+    * In .ini format 
     * In JSON format
     * An executable that takes no arguments and outputs JSON on standard out 
 
@@ -393,20 +393,20 @@ Ansible defines several variables that are always available in a playbook:
 | Parameter | Description | 
 |:--- | :--- | 
 | hostvars | A dict whose keys are Ansible hostnames and values are dicts that map variable names to values | 
-| inventory_hostname | Fully qualified domain name of the current host as known by Ansible (e.g., myhost.exam ple.com) |
+| inventory_hostname | Fully qualified domain name of the current host as known by Ansible (e.g., myhost.example.com) |
 | inventory_hostname_short | Name of the current host as known by Ansible, without the domain name (e.g., myhost) | 
 | group_names | A list of all groups that the current host is a member of |
 | groups | A dict whose keys are Ansible group names and values are a list of hostnames that are members of the group. Includes all and ungrouped groups:{"all": [...], "web": [...], "ungrouped": [...]} |
-| ansible_check_mode | A boolean that is true when running in check mode (see “Check Mode” on page 313) | 
+| ansible_check_mode | A boolean that is true when running in check mode | 
 | ansible_play_batch | A list of the inventory hostnames that are active in the current batch |
 | ansible_play_hosts | A list of all of the inventory hostnames that are active in the current play | 
 | ansible_version | A dict with Ansible version info: {"full": 2.3.1.0", "major": 2, "minor": 3, "revision": 1, "string": "2.3.1.0"} |
 
 #### hostvars
 
-In Ansible, variables are scoped by host. It only makes sense to talk about the value of a variable relative to a given host. Sometimes, a task that’s
-running on one host needs the value of a variable defined on another host. Imagine you need to retrieve the IP of a particular server, if our server
-is db.example.com, then we could put the following in a configuration template: `{{ hostvars['db.example.com'].ansible_eth1.ipv4.address }}`.
+In Ansible, variables are scoped per host. It only makes sense to talk about the value of a variable relative to a given host. Sometimes, a task
+that's running on one host needs the value of a variable defined on another host. Imagine you need to retrieve the IP of a particular server, if our
+server is db.example.com, then we could put the following in a configuration template: `{{ hostvars['db.example.com'].ansible_eth1.ipv4.address }}`.
 
 #### inventory_hostname
 
@@ -425,12 +425,13 @@ The groups variable can be useful when you need to access variables for a group 
 
 #### Setting Variables on the Command Line
 
-Variables set by passing -e var=value to ansible-playbook have the highest precedence, which means you can use this to override variables that are
+Variables set by passing `-e var=value` to ansible-playbook have the highest precedence, which means you can use this to override variables that are
 already defined. Ansible also allows you to pass a file containing the variables instead of passing them directly on the command line by passing
 _@filename.yml_ as the argument to -e.
 
 #### Precedence
-You can define the same variable multiple times for a host, using different values (avoid this when you can). When the same variable is defined in 
+
+You can define the same variable multiple times for a host, using different values (avoid this when you can). When the same variable is defined in
 multiple ways, the precedence rules determine which value wins. The basic rules of precedence are as follows (Highest to lowest):
 
     1. ansible-playbook -e var=value
