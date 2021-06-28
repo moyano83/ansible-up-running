@@ -302,3 +302,152 @@ our Ubuntu hosts, and then we use the apt module to install packages:
 ```
 
 ## Chapter 4: Variables and Facts<a name="Chapter4"></a>
+
+### Defining Variables in Playbooks
+
+The simplest way to define variables is to put a vars section in your playbook with the names and values of variables:
+
+```yaml
+vars:
+  key_file: /etc/nginx/ssl/nginx.key
+  cert_file: /etc/nginx/ssl/nginx.crt
+  conf_file: /etc/nginx/sites-available/default
+  server_name: localhost
+```
+
+Ansible also allows you to put variables into one or more files, using a section called _vars\_files_:
+
+```yaml
+vars_files:
+  - file_in_the_same_folder.yml
+```
+
+For debugging, it’s often handy to be able to view the output of a variable. You can use the following: `- debug: var=myvarname`.
+
+### Registering Variables
+
+Often, you’ll find that you need to set the value of a variable based on the result of a task. To do so, we create a registered variable using the
+register clause when invoking a module:
+
+```yaml
+- name: capture output of whoami command
+  command: whoami
+  register: login
+```
+
+The value of a variable set using the register clause is always a dictionary, but the specific keys of the dictionary are different depending on the
+module that was invoked. If a variable contains a dictionary, you can access the keys of the dictionary by using either a dot (.) or a subscript ([]).
+The simplest way to find out what a module returns is to register a variable and then output that variable with the debug module. If the task fails,
+Ansible will stop executing tasks for the failed host. We can use the _ignore\_errors_ clause.
+
+### Facts
+
+When Ansible gathers facts, it connects to the host and queries it for all kinds of details about the host: CPU architecture, operating system, IP
+addresses, memory info, disk info, and more. This information is stored in variables that are called facts, and they behave just like any other
+variable. You can get those like in the example below:
+
+```yaml
+ - name: print out operating system
+     hosts: all
+     gather_facts: True
+     tasks:
+       - debug: var=ansible_distribution
+```
+
+Ansible implements fact collecting through the use of a special module called the setup module. You don’t need to call this module in your playbooks
+because Ansible does that automatically when it gathers facts. Because Ansible collects many facts, the setup module supports a filter parameter that
+lets you filter by fact name by specifying a glob.1 For example: `ansible web -m setup -a 'filter=ansible_eth*'`. The output is a dictionary whose key
+is _ansible\_facts_.
+
+#### Local Facts
+
+Ansible provides an additional mechanism for associating facts with a host. You can place one or more files on the remote host machine in the
+_/etc/ansible/facts.d_ directory. Ansible will recognize the file if it's any of the following:
+
+    * In.iniformat 
+    * In JSON format
+    * An executable that takes no arguments and outputs JSON on standard out 
+
+These facts are available as keys of a special variable named _ansible\_local_. If we name the file _example.fact_, then the dictionary will contain a
+key _ansible\_local_ with another key _example_ containing all the variables set in the _example.fact_ file.
+
+#### Using set_fact to Define a New Variable
+
+Ansible also allows you to set a fact in a task by using the _set\_fact_ module. Below Example demonstrates how to use set_fact so that a variable can
+be referred to as snap instead of _snap\_result.stdout_:
+
+```yaml
+- name: get snapshot id
+  shell: >
+    aws ec2 describe-snapshots --filters
+    Name=tag:Name,Values=my-snapshot
+    | jq --raw-output ".Snapshots[].SnapshotId"
+  register: snap_result
+- set_fact: snap={{ snap_result.stdout }}
+```
+
+### Built-in Variables
+
+Ansible defines several variables that are always available in a playbook:
+
+| Parameter | Description | 
+|:--- | :--- | 
+| hostvars | A dict whose keys are Ansible hostnames and values are dicts that map variable names to values | 
+| inventory_hostname | Fully qualified domain name of the current host as known by Ansible (e.g., myhost.exam ple.com) |
+| inventory_hostname_short | Name of the current host as known by Ansible, without the domain name (e.g., myhost) | 
+| group_names | A list of all groups that the current host is a member of |
+| groups | A dict whose keys are Ansible group names and values are a list of hostnames that are members of the group. Includes all and ungrouped groups:{"all": [...], "web": [...], "ungrouped": [...]} |
+| ansible_check_mode | A boolean that is true when running in check mode (see “Check Mode” on page 313) | 
+| ansible_play_batch | A list of the inventory hostnames that are active in the current batch |
+| ansible_play_hosts | A list of all of the inventory hostnames that are active in the current play | 
+| ansible_version | A dict with Ansible version info: {"full": 2.3.1.0", "major": 2, "minor": 3, "revision": 1, "string": "2.3.1.0"} |
+
+#### hostvars
+
+In Ansible, variables are scoped by host. It only makes sense to talk about the value of a variable relative to a given host. Sometimes, a task that’s
+running on one host needs the value of a variable defined on another host. Imagine you need to retrieve the IP of a particular server, if our server
+is db.example.com, then we could put the following in a configuration template: `{{ hostvars['db.example.com'].ansible_eth1.ipv4.address }}`.
+
+#### inventory_hostname
+
+The inventory_hostname is the hostname of the current host, as known by Ansible. If your inventory contains a line like
+`server1 ansible_host=192.168.4.10` then _inventory\_hostname_ would be _server1_.
+
+#### Groups
+
+The groups variable can be useful when you need to access variables for a group of hosts. You can use it like in the example below:
+
+```jinja2
+{% for host in groups.web %}
+  server {{ hostvars[host].inventory_hostname }} {{ hostvars[host].ansible_default_ipv4.address }}:80
+{% endfor %}
+```
+
+#### Setting Variables on the Command Line
+
+Variables set by passing -e var=value to ansible-playbook have the highest precedence, which means you can use this to override variables that are
+already defined. Ansible also allows you to pass a file containing the variables instead of passing them directly on the command line by passing
+_@filename.yml_ as the argument to -e.
+
+#### Precedence
+You can define the same variable multiple times for a host, using different values (avoid this when you can). When the same variable is defined in 
+multiple ways, the precedence rules determine which value wins. The basic rules of precedence are as follows (Highest to lowest):
+
+    1. ansible-playbook -e var=value
+    2. Task variables
+    3. Block variables
+    4. Role and include variables
+    5. set_fact
+    6. Registered variables
+    7. vars_files
+    8. vars_prompt
+    9. Play variables
+    10. Host facts
+    11. host_vars set on a playbook
+    12. group_vars set on a playbook
+    13. host_vars set in the inventory 
+    14. group_vars set in the inventory
+    15. Inventory variables
+    16. In defaults/main.yml of a role
+
+## Chapter 5: Introducing Mezzanine: Our Test Application<a name="Chapter5"></a>
