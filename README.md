@@ -508,3 +508,91 @@ values. You can add an environment clause to any task; it doesn't have to be a s
 ```
 
 ## Chapter 7: Roles: Scaling Up Your Playbooks<a name="Chapter7"></a>
+
+In Ansible, the role is the primary mechanism for breaking a playbook into multiple files.
+
+### Basic Structure of a Role
+
+An Ansible role has a name, such as database. Files associated with the database role go in the roles/database directory, which contains the following
+files and directories (each individual file is optional, no need to add an empty file if no configuration is given):
+
+    * roles/database/tasks/main.yml: Tasks
+    * roles/database/files/: Holds files to be uploaded to hosts
+    * roles/database/templates/: Holds Jinja2 template files
+    * roles/database/handlers/main.yml: Handlers
+    * roles/database/vars/main.yml: Variables that shouldn't be overridden
+    * roles/database/defaults/main.yml: Default variables that can be overridden
+    * roles/database/meta/main.yml: Dependency information about a role
+
+Ansible looks for roles in the _roles_ directory alongside your playbooks. It also looks for systemwide roles in _/etc/ansible/roles_
+(customizable in ansible.cfg or by providing ANSIBLE_ROLES_PATH).
+
+### Using Roles in Your Playbooks
+
+When we use roles, we have a _roles_ section in our playbook, we can pass in variables when invoking the roles:
+
+```yaml
+- role: my_role
+  name: "{{ some_value }}"
+  user: "{{ some_value }}"
+```
+
+### Pre-Tasks and Post-Tasks
+
+Ansible allows you to define a list of tasks that execute before the roles with a _pre\_tasks_ section, and a list of tasks that execute after the
+roles with a _post\_tasks_ section:
+
+```yaml
+- name: My Ansible script
+  hosts: web
+  vars_files:
+    - secrets.yml
+  pre_tasks:
+    - name: some task to be executed before my role
+      ...
+  roles:
+    - role: my_role
+      ...
+  post_tasks:
+    -name: some task to be executed after my role
+  ...
+```
+
+#### Defining variables in roles
+
+There are two places available to define variables in roles, the _vars/main.yml_ file and the _defaults/main.yml_. If you think you might want to
+change the value of a variable in a role, use a default variable. If you don't want it to change, use a regular variable. It is a good practice to
+prepend your variable names with the role name, as ansible doesn't have the concept of namespace for variables (This means that variables that are
+defined in other roles, or elsewhere in a playbook, will be accessible everywhere).
+
+There's one important difference between tasks defined in a role and tasks defined in a regular playbook, and that's when using the copy or template
+modules. When invoking copy in a task defined in a role, Ansible will first check the rolename/ files/ directory for the location of the file to copy.
+Similarly, when invoking template in a task defined in a role, Ansible will first check the rolename/templates directory for the location of the
+template to use.
+
+### Creating Role Files and Directories with ansible-galaxy
+
+Ansible has a command line tool named ansible-galaxy, which primary purpose is to download roles that have been shared by the Ansible community, but
+it can also be used to generate scaffolding, an initial set of files and directories involved in a role:
+`ansible-galaxy init -p <role directory> <role name>`
+
+### Dependent Roles
+
+Ansible supports a feature called dependent roles, when you define a role, you can specify that it depends on one or more other roles. Ansible will
+ensure that roles that are specified as dependencies are executed first. We specify that the web role depends on the ntp role by creating a
+_roles/web/meta/main.yml_ file and listing the dependant roles there
+
+```yaml
+dependencies:
+  - { role1: some_role1, var_name1=var_value1 }
+  - { role2: some_role2 }
+```
+
+### Ansible Galaxy
+
+Ansible Galaxy is an open source repository of Ansible roles contributed by the Ansible community. The roles themselves are stored on GitHub. The
+ansible-galaxy command-line tool allows you to download roles from Ansible Galaxy. You can install a role (i.e. _test_ developed by _dev1_) with
+`ansible-galaxy install -p ./roles dev1.test`. The ansible-galaxy program will install roles to your systemwide location by default (configurable in
+ansible.cfg). You can list installed roles with `ansible-galaxy list` and remove a role with `ansible-galaxy remove dev1.test`.
+
+## Chapter 8: Complex Playbooks<a name="Chapter8"></a>
