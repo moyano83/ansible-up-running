@@ -452,3 +452,59 @@ multiple ways, the precedence rules determine which value wins. The basic rules 
     16. In defaults/main.yml of a role
 
 ## Chapter 5: Introducing Mezzanine: Our Test Application<a name="Chapter5"></a>
+
+In contrast with the deployment to a development environment, deploying to a production environment involves the use of several independent pieces of
+software such as a web server, database with specific user's application permissions, a process supervisor and much more. This is to be developed in
+the next chapter.
+
+## Chapter 6: Deploying Mezzanine with Ansible<a name="Chapter6"></a>
+
+The ansible-playbook command-line tool supports a flag called `--list-tasks`. This flag prints out the names of all the tasks in a playbook:
+`ansible-playbook --list-task <filename>.yaml`.
+
+### Using Iteration (with_items) to Install Multiple Packages
+
+To install several system packages at the same time, we can use the `with_items` property like this:
+
+```yaml
+- name: install apt packages
+  apt: pkg={{ item }} update_cache=yes cache_valid_time=3600
+  become: True
+  with_items:
+    - git
+    - libjpeg-dev
+    - libpq-dev
+```
+
+The `{{ item }}` is a placeholder variable that will be populated by each of the elements in the list of the `with_items` clause. The apt module
+contains an optimization making it more efficient to install multiple packages by using the with_items clause. Ansible will pass the entire list of
+packages to the apt module, and the module will invoke the apt program only once, passing it the entire list of packages to be installed. By
+adding `become: True` to the tasks we effectively run them as root.
+
+### Updating the Apt Cache
+
+Ubuntu maintains a cache with the names of all of the apt packages that are available in the Ubuntu package archive. In some cases, when the Ubuntu
+project releases a new version of a package, it removes the old version from the package archive. If the local apt cache of an Ubuntu server hasn't
+been updated, then it will attempt to install a package that doesn't exist in the package archive. Run `apt-get update` to update the cache.
+
+### Complex Arguments in Tasks: A Brief Digression
+
+A complex argument is an argument to a module that is a list or a dictionary. If we don't like long lines in our files, we could break up the argument
+string across multiple lines by using YAML's line folding (>), or you can mix it up by passing some arguments as a string and others as a dictionary.
+
+### Running Custom Python Scripts in the Context of the Application
+
+You can set environment variables with an environment clause on a task, passing it a dictionary that contains the environment variable names and
+values. You can add an environment clause to any task; it doesn't have to be a script. i.e.
+
+```yaml
+- name: set the site id
+  script: scripts/setsite.py
+  environment:
+    PATH: "{{ venv_path }}/bin"
+    PROJECT_DIR: "{{ proj_path }}"
+    PROJECT_APP: "{{ proj_app }}"
+    WEBSITE_DOMAIN: "{{ live_hostname }}"
+```
+
+## Chapter 7: Roles: Scaling Up Your Playbooks<a name="Chapter7"></a>
