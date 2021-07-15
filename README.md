@@ -596,3 +596,423 @@ ansible-galaxy command-line tool allows you to download roles from Ansible Galax
 ansible.cfg). You can list installed roles with `ansible-galaxy list` and remove a role with `ansible-galaxy remove dev1.test`.
 
 ## Chapter 8: Complex Playbooks<a name="Chapter8"></a>
+
+### Dealing with Badly Behaved Commands: changed_when and failed_when
+
+If we don't have a module that could invoke idempotent commands, we can use _changed\_when_ and _failed\_when_ clauses to change how Ansible
+identifies that a task has changed state or failed. In the example below, if the database is created it print something like "Creating tables", but
+when we try to run the second time it prints something like "CommandError: Database already created".
+
+```yaml
+- name: initialize the database
+  django_manage:
+    command: createdb --noinput --nodata
+    app_path: "{{ proj_path }}"
+    virtualenv: "{{ venv_path }}"
+  register: result
+  changed_when: '"Creating tables" in result.out|default("")'
+```
+
+### Filters
+
+Filters are a feature of the Jinja2 templating engine, you can use filters inside `{{ braces }}` in your playbooks, as well as inside your template
+files. Using filters resembles using Unix pipes, whereby a variable is piped through a filter.
+
+#### The Default Filter
+
+The default filter is used to define default values in variables, in case they are not defined: `{{ database_host | default('localhost') }}`.
+
+#### Filters for Registered Variables
+
+Let's say we want to run a task and print out its output, even if the task fails (and fail after printing the variable in this case):
+
+```yaml
+- name: Run myprog
+  command: bash ./myprog.sh
+  register: result
+  ignore_errors: True
+
+- debug: var=result
+
+- debug: msg="Stop running the playbook if myprog failed"
+  failed_when: result|failed
+```
+
+Task return value filters:
+
+| Name | Description |
+| :---  | :--- |
+| failed | True if a registered value is a task that failed |
+| changed | True if a registered value is a task that changed |
+| success | True if a registered value is a task that succeeded |
+| skipped | True if a registered value is a task that was skipped |
+
+#### Filters That Apply to File Paths
+
+File path filters:
+
+| Name | Description |
+| :---  | :--- |
+| basename | Base name of file path |
+| dirname | Directory of file path |
+| expanduser | File path with~replaced by home directory |
+| realpath | Canonical path of file path, resolves symbolic links |
+
+In an example, the playbook below avoids repetition of 'index.html' by using the basename filter.
+
+```yaml
+vars:
+  homepage: /usr/share/nginx/html/index.html
+tasks:
+  - name: copy home page
+    copy: src=files/{{ homepage | basename }} dest={{ homepage }}
+```
+
+#### Writing Your Own Filter
+
+Ansible will look for custom filters in the filter_plugins directory, relative to the directory containing your playbooks. You can place a python
+script in this directory with the following signature to add your own scripts:
+
+```python
+# MyFilter.py
+def my_function(parameters_to_my_function):
+    return "Something with parameters_to_my_function"
+
+
+class FilterModule(object):
+    def filters(self):
+        return {'my_function_name': my_function}
+```
+
+#### Lookups
+
+Sometimes a piece of configuration data you need lives somewhere else, like a text file or a csv. Ansible has a feature called lookups that allows you
+to read in configuration data from various sources and then use that data in your playbooks and template.
+
+| Name | Description |
+| :---  | :--- |
+| file | Contents of a file |
+| password | Randomly generate a password |
+| pipe | Output of locally executed command |
+| env | Environment variable |
+| template | Jinja2 template after evaluation |
+| csvfile | Entry in a .csv file |
+| dnstxt | DNS TXT record |
+| redis_kv | Redis key lookup |
+| etcd | etcd key lookup |
+
+You invoke lookups by calling the lookup function with two arguments. The first is a string with the name of the lookup, and the second is a string
+that contains one or more arguments to pass to the lookup. You can invoke lookups in your playbooks between `{{ braces }}`, or you can put them in
+templates.
+
+##### File
+
+Read the contents of a file and pass that as a parameter to a module.
+
+```yaml
+- name: Add my public key as an EC2 key
+  ec2_key: name=mykey key_material="{{ lookup('file', '/Users/jmoyano/.ssh/id_rsa.pub') }}"
+```
+
+##### pipe
+
+The pipe lookup invokes an external program on the control machine and evaluates to the program's output on standard out.
+
+````yaml
+- name: get SHA of most recent commit
+  debug: msg="{{ lookup('pipe', 'git rev-parse HEAD') }}"
+````
+
+##### env
+
+The env lookup retrieves the value of an environment variable set on the control machine:
+
+```yaml
+ - name: get the current shell
+   debug: msg="{{ lookup('env', 'SHELL') }}"
+```
+
+##### password
+
+The password lookup evaluates to a random password, and it will also write the password to a file specified in the argument.
+
+```yaml
+- name: create deploy postgres user
+  postgresql_user:
+    name: deploy
+    password: "{{ lookup('password', 'deploy-password.txt') }}"
+```
+
+##### template
+
+The template lookup lets you specify a Jinja2 template file, and then returns the result of evaluating the template.
+
+```yaml
+- name: output message from template
+  debug: msg="{{ lookup('template', 'message.j2') }}"
+```
+
+##### csvfile
+
+The csvfile lookup reads an entry from a csv file. An example of utilization is `lookup('csvfile', 'sue file=users.csv delimiter=, col=1')`. The
+second parameter to lookup is a list of parameters, in this case you don't specify a name for the first argument to a lookup plugin, but you do
+specify names for the additional arguments. The first argument is an entry that must appear exactly once in column 0 (the first column, 0-indexed)
+of the table. The other arguments specify the name of the csv file, the delimiter, and which column should be returned.
+
+##### dnstxt
+
+A TXT record is just an arbitrary string that you can attach to a hostname in the DNS protocol. Once you've associated a TXT record with a hostname,
+anybody can retrieve the text by using a DNS client, like in: `dig +short some_domain.com TXT`. The dnstxt lookup queries the DNS server for the TXT
+record associated with the host. We can do the same in a playbook:
+
+```yaml
+- name: look up TXT record
+  debug: msg="{{ lookup('dnstxt', 'ansiblebook.com') }}"
+```
+
+If multiple TXT records are associated with a host, the module will concatenate them together, and it might do this in a different order each time it
+is called.
+
+##### redis_kv
+
+Redis is a popular key-value store, commonly used as a cache, as well as a data store for job queue services. You can use the redis_kv lookup to
+retrieve the value of a key.
+
+```yaml
+- name: look up value in Redis
+  debug: msg="{{ lookup('redis_kv', 'redis://localhost:6379,key_to_look_for') }}"
+```
+
+The module will default to _redis://localhost:6379_ if the URL isn't specified, so we could invoke the module like:
+`lookup('redis_kv', ',key_to_look_for')`.
+
+##### etcd
+
+Etcd is a distributed key-value store, commonly used for keeping configuration data and for implementing service discovery. If we define a task in our
+playbook that invokes the etcd plugin:
+
+```yaml
+- name: look up value in etcd
+  debug: msg="{{ lookup('etcd', 'key_to_look_for') }}"
+```
+
+By default, the etcd lookup looks for the etcd server at _http://127.0.0.1:4001_, but you can change this by setting the _ANSIBLE\_ETCD\_URL_
+environment variable before invoking ansible-playbook.
+
+### More Complicated Loops
+
+Summary of the iteration constructs available:
+
+| Name | Input | Looping Strategy |
+| :--- | :---- | :--------------- |
+| with_items | List | Loop over list elements |
+| with_lines | Command to execute | Loop over lines in command output |
+| with_fileglob | Glob | Loop over filenames | 
+| with_first_found | List of paths | First file in input that exists |
+| with_dict | Dictionary | Loop over dictionary elements |
+| with_flattened | List of lists | Loop over flattened list | 
+| with_indexed_items | List | Single iteration | 
+| with_nested | List | Nested loop | 
+| with_random_choice | List | Single iteration | 
+| with_sequence | Sequence of integers | Loop over sequence | 
+| with_subelements | List of dictionaries | Nested loop | 
+| with_together | List of lists | Loop over zipped list | 
+| with_inventory_hostnames | Host pattern | Loop over matching hosts |
+
+#### with_lines
+
+The with_lines looping construct lets you run an arbitrary command on your control machine and iterate over the output, one line at a time.
+
+```yaml
+- name: Send out a slack message
+  slack:
+    domain: example.slack.com
+    token: "{{ slack_token }}"
+    msg: "{{ item }} was in the list"
+  with_lines:
+    - cat files/turing.txt
+```
+
+#### with_fileglob
+
+The with_fileglob construct is useful for iterating over a set of files on the control machine.
+
+```yaml
+- name: add public keys to account
+  authorized_key: user=deploy key="{{ lookup('file', item) }}"
+  with_fileglob:
+    - /var/keys/*.pub
+```
+
+#### with_dict
+
+The with_dict construct lets you iterate over a dictionary instead of a list. The item loop variable is a dictionary with two keys: _key_ and _value_.
+
+```yaml
+- name: iterate over ansible_eth0
+    debug: msg={{ item.key }}={{ item.value }}
+    with_dict: "{{ ansible_eth0.ipv4 }}"
+```
+
+#### Looping Constructs as Lookup Plugins
+
+Ansible implements looping constructs as lookup plugins. You just slap a with at the beginning of a lookup plugin to use it in its loop form.
+
+```yaml
+- name: Add my public key as an EC2 key using the file lookup as a loop
+  ec2_key: name=mykey key_material="{{ item }}"
+  with_file: /Users/lorin/.ssh/id_rsa.pub
+```
+
+### Loop Controls
+
+Ansible provides users with more control over loop handling.
+
+#### Setting the Variable Name
+
+The loop_var control allows us to give the iteration variable a different name than the default name, item. In the example below, we would like to
+loop over multiple tasks at once. One way to achieve that is to use include with `with_items`. However, the _vhosts.yml_ file that is going to be
+included may also contain `with_items` in some tasks. This would produce a conflict, as the default `loop_var` item is used for both loops at the same
+time. To prevent a naming collision, we specify a different name for `loop_var` in the outer loop (inside the _vhosts.yml_ file we can use the
+`item` var inside the loops as well as `vhost.domain`).
+
+```yaml
+- name: run a set of tasks in one loop
+  include: vhosts.yml
+  with_items:
+    - { domain: www1.example.com }
+    - { domain: www2.example.com }
+  loop_control:
+    loop_var: vhost
+```
+
+#### Labeling the Output
+
+The label control provides some control over how the loop output will be shown to the user during execution.
+
+```yaml
+- name: create nginx vhost configs
+  template:
+    src: "{{ item.domain }}.conf.j2"
+    dest: "/etc/nginx/conf.d/{{ item.domain }}.conf"
+  with_items:
+    - { domain: www1.example.com, ssl_enabled: yes }
+    - { domain: www2.example.com, aliases: [ edge2.www.example.com, eu.www.example.com ] }
+  loop_control:
+    label: "for domain {{ item.domain }}"
+```
+
+This results in much more readable output:
+
+```text
+TASK [create nginx vhost configs] **********************************************
+ok: [localhost] => (item=for domain www1.example.com)
+ok: [localhost] => (item=for domain www2.example.com)
+```
+
+### Includes
+
+The include feature allows you to include tasks or even whole playbooks, depending on where you define an include. It is often used in roles to
+separate or even group tasks and task arguments to each task in the included file. If we have a file named _nginx_include.yml_ with contents:
+
+```yaml
+- name: install nginx
+  package:
+    name: nginx
+
+- name: ensure nginx is running
+  service:
+    name: nginx
+    state: started
+    enabled: yes
+```
+
+We can create a task like the one below to which would add the `tag`, `become` and `when` condition to both of them.
+
+```yaml
+- include: nginx_include.yml
+  tags: nginx
+  become: yes
+  when: ansible_os_family == 'RedHat'
+```
+
+#### Dynamic Includes
+
+A common pattern in roles is to define tasks specific to a particular operating system into separate task files. Ansible allows us to dynamically
+include a file by using variable substitution (but `ansible-playbook --list-tasks` might not list the tasks from a dynamic `include` if it does not
+have enough information to populate the variables that determine which file will be included):
+
+```yaml
+- include: "{{ ansible_os_family }}.yml"
+  static: no
+```
+
+#### Role Includes
+
+A special include is the include_role clause. In contrast with the role clause, which will use all parts of the role, the include_role not only allows
+us to selectively choose what parts of a role will be included and used, but also where in the play.
+
+```yaml
+- name: install php
+  include_role:
+    name: php
+    tasks_from: install
+```
+
+### Blocks
+
+Like the _include_ clause, the _block_ clause provides a mechanism for grouping tasks. The _block_ clause allows you to set conditions or arguments
+for all tasks within a block at once:
+
+```yaml
+- block:
+    - name: install nginx
+      package:
+        name: nginx
+    - name: ensure nginx is running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+  become: yes
+  when: "ansible_os_family == 'RedHat'"
+```
+
+### Error Handling with Blocks
+
+Ansible's default error-handling behavior is to take a host out of the play if a task fails and continue as long as there are hosts remaining that
+haven't encountered errors. In combination with the _serial_ and _max\_fail\_percentage_ clause, Ansible gives you some control over when a play has
+to be declared as failed. The way error handling is implemented reminds the _try-catch-finally_ paradigm, and it works much the same way.
+
+```yaml
+- block:
+    - debug: msg="You will see a failed tasks right after this"
+    - command: /bin/false
+    - debug: "You won't see this message"
+      rescue:
+    - debug: "You only see this message in case of an failure in the block"
+      always:
+    - debug: "This will be always executed"
+```
+
+### Encrypting Sensitive Data with Vault
+
+In case our playbooks needs access to sensitive information, Ansible allows us to encrypt files using a command line tool named _ansible-vault_. This
+tool allows you to create and edit an encrypted file that ansible-playbook will recognize and decrypt automatically, given the password. We can
+encrypt an existing file with `ansible-vault encrypt my_secret_file.yml` or even create it from scratch with `ansible-vault create my_secret_file.yml`
+(you will be prompted for a password, and then ansible-vault will launch a text edi‐ tor so that you can populate the file). To use this file, we need
+to tell ansible-playbook to prompt us for the password of the encrypted file, or it will simply error out.
+Use `ansible-playbook mezzanine.yml --ask-vault-pass` or put the password in a file and use
+`ansible-playbook mezzanine --vault-password-file ./my_password_file.txt`, if the argument to `--vault-password-file` has the executable bit set,
+Ansible will execute it and use the contents of standard out as the vault password. Other ansible-vault commands are:
+
+| Command | Description |
+| :------ | :---------- |
+| encrypt | Encrypt the plain-text file.yml file |
+| decrypt | Decrypt the encrypted file.yml file |
+| view    | Print the contents of the encrypted file.yml file |
+| create  | Create a new encrypted file.yml file |
+| edit    | Edit an encrypted file.yml file |
+| rekey   | Change the password on an encrypted file.yml file |
+
+## Chapter 9: Customizing Hosts, Runs, and Handlers<a name="Chapter9"></a>
