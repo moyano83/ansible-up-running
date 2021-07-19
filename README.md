@@ -1133,14 +1133,14 @@ notified.
 
 ### Manually Gathering Facts
 
-Ansible will try to SSH to the host to gather facts before running the first tasks. We can dissable this behaviour using _gather\_facts_ set to 
-false and then explicitly invoke the _setup_ module to get Ansible to gather our facts:
+Ansible will try to SSH to the host to gather facts before running the first tasks. We can dissable this behaviour using _gather\_facts_ set to false
+and then explicitly invoke the _setup_ module to get Ansible to gather our facts:
 
 ```yaml
  tasks:
    - name: wait for ssh server to be running
      local_action: wait_for port=22 host="{{ inventory_hostname }}" search_regex=OpenSSH
-     
+
    - name: gather facts
      setup:
    # The rest of the tasks go here
@@ -1148,14 +1148,14 @@ false and then explicitly invoke the _setup_ module to get Ansible to gather our
 
 ### Retrieving the IP Address from the Host
 
-Ansible retrieves the IP address of each host and stores it as a fact. Each network interface has an associated Ansible fact. Using the name of 
-the web interfaces, we can define our variables like this:
+Ansible retrieves the IP address of each host and stores it as a fact. Each network interface has an associated Ansible fact. Using the name of the
+web interfaces, we can define our variables like this:
 
 ```yaml
 live_hostname: "{{ ansible_eth1.ipv4.address }}.com"
 domains:
-- "{{ ansible_eth1.ipv4.address }}.com"
-- "www.{{ ansible_eth1.ipv4.address }}.com"
+  - "{{ ansible_eth1.ipv4.address }}.com"
+  - "www.{{ ansible_eth1.ipv4.address }}.com"
 ```
 
 ## Chapter 10: Callback Plugins<a name="Chapter10"></a>
