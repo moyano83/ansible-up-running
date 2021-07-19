@@ -47,7 +47,7 @@ tasks to perform on those hosts. It's important to note the following:
     * Ansible Scales Down, it is easy to configure a single node
     * Ansible modules are declarative; you use them to describe the state you want the server to be in. Ansible comes with a large collection of 
       modules it ships with, and modules are idempotent
-    * Ansible does not provide a layer of abstraction so that you can use the same configuration management scripts to manage servers running 
+    * Ansible does not provide a layer of abstraction so that you can't use the same configuration management scripts to manage servers running 
       different operating systems, ansible playbooks aren't really intended to be reused across different contexts
 
 ### Installing Ansible
@@ -1000,7 +1000,7 @@ to be declared as failed. The way error handling is implemented reminds the _try
 In case our playbooks needs access to sensitive information, Ansible allows us to encrypt files using a command line tool named _ansible-vault_. This
 tool allows you to create and edit an encrypted file that ansible-playbook will recognize and decrypt automatically, given the password. We can
 encrypt an existing file with `ansible-vault encrypt my_secret_file.yml` or even create it from scratch with `ansible-vault create my_secret_file.yml`
-(you will be prompted for a password, and then ansible-vault will launch a text edi‐ tor so that you can populate the file). To use this file, we need
+(you will be prompted for a password, and then ansible-vault will launch a text editor so that you can populate the file). To use this file, we need
 to tell ansible-playbook to prompt us for the password of the encrypted file, or it will simply error out.
 Use `ansible-playbook mezzanine.yml --ask-vault-pass` or put the password in a file and use
 `ansible-playbook mezzanine --vault-password-file ./my_password_file.txt`, if the argument to `--vault-password-file` has the executable bit set,
@@ -1016,3 +1016,146 @@ Ansible will execute it and use the contents of standard out as the vault passwo
 | rekey   | Change the password on an encrypted file.yml file |
 
 ## Chapter 9: Customizing Hosts, Runs, and Handlers<a name="Chapter9"></a>
+
+### Patterns for Specifying Hosts
+
+Instead of specifying a single host or group, you can specify a pattern. From all hosts `hosts: all` to a union of groups `hosts: dev:staging` or a
+group intersection `hosts: staging:&database` (all database servers in staging). The supported patterns are:
+
+| Action | Example usage |
+| :------ | :---------- |
+| All hosts | all | 
+| All hosts | * | 
+| Union | dev:staging | 
+| Intersection | staging:&database | 
+| Exclusion | dev:!queue | 
+| Wildcard | *.example.com | 
+| Range of numbered servers | web[5:10] |  
+| Regular expression | ~web\d+\.example\.(com\|org) | 
+
+### Limiting Which Hosts Run
+
+Use the `-l` hosts or `--limit` hosts flag to tell Ansible to limit the hosts to run the playbook against the specified list of hosts:
+`ansible-playbook -l hosts playbook.yml`.
+
+### Running a Task on the Control Machine
+
+Sometimes you want to run a particular task on the control machine instead of on the remote host. Ansible provides the _local\_action_ clause for
+tasks to support this. If your play involves multiple hosts, and you use _local\_action_, the task will be executed multiple times, one for each host.
+You can restrict this by using _run\_once_.
+
+### Running a Task on a Machine Other Than the Host
+
+Sometimes you want to run a task that's associated with a host, but you want to execute the task on a different server. Use the _delegate\_to_
+clause to run the task on a different host.
+
+### Running on One Host at a Time
+
+By default, Ansible runs each task in parallel across all hosts. Sometimes you want to run your task on one host at a time. You can use the _serial_
+clause on a play (outside the task, at the play level) to tell Ansible to restrict the number of hosts that a play runs on. Normally, when a task
+fails, Ansible stops running tasks against the host that fails, but continues to run against other hosts. You can use a _max_fail\_percentage_
+clause along with the _serial_ clause to specify the maximum percentage of failed hosts before Ansible fails the entire play.
+
+### Running on a Batch of Hosts at a Time
+
+You can also pass serial a percentage value instead of a fixed number, like in `serial:50%`, or you can determine the numer of percentage of hosts to
+run in every iteration by passing a list, like in:
+
+```yaml
+serial:
+  -1
+  - 30%
+```
+
+### Running Only Once
+
+Sometimes you might want a task to run only once, even if there are multiple hosts. You can use the run_once clause to tell Ansible to run the command
+only once (particularly useful when using local_action if your playbook involves multiple hosts, and you want to run the local task only once):
+
+```yaml
+- name: run the database migrations
+  command: /opt/run_migrations
+  run_once: true
+```
+
+### Running Strategies
+
+The _strategy_ clause on a play level gives you additional control over how Ansible behaves per task for all hosts. Available strategies are:
+
+    * linear (default): This is the strategy in which Ansible executes one task on all hosts and waits until the task has completed or failed on 
+      all hosts before it executes the next task on all hosts.
+    * Free: Ansible will not wait for results of the task to execute on all hosts. Instead, if a host com‐ pletes one task, Ansible will execute 
+      the next task on that host.
+
+### Advanced Handlers
+
+#### Handlers in Pre and Post Tasks
+
+Handlers are usually executed after all tasks, once, and only when they get notified. But keep in mind there are not only _tasks_, but _pre\_tasks_,
+_tasks_, and _post\_tasks_. Each tasks section in a playbook is handled separately, any handler notified in _pre\_tasks_, _tasks_, or
+_post\_tasks_ is executed at the end of each section. A handler can be executed several times in one play.
+
+#### Flush Handlers
+
+Ansible lets us control the execution point of the handlers with the help of a special module, _meta_. i.e. if we want to execute the handlers
+'my_handler' in between task1 and task2, we can configure it like this:
+
+```yaml
+- name: task1
+  ...
+
+- name: My Handler execution
+  meta: my_handler
+
+- name: task2
+  ...
+```
+
+#### Handlers Listen
+
+The listen clause defines what we'll call an event, on which one or more handlers can listen. This decouples the task notification key from the
+handlers name. To notify more handlers to the same event, we just let these additional handlers listen on the same event, and they will also get
+notified.
+
+```yaml
+---
+- hosts: mailservers
+  tasks:
+    - copy:
+        src: main.conf
+        dest: /etc/postfix/main.cnf
+      notify: postfix config changed
+  handlers:
+    - name: restart postfix
+      service: name=postfix state=restarted
+      listen: postfix config changed
+```
+
+### Manually Gathering Facts
+
+Ansible will try to SSH to the host to gather facts before running the first tasks. We can dissable this behaviour using _gather\_facts_ set to 
+false and then explicitly invoke the _setup_ module to get Ansible to gather our facts:
+
+```yaml
+ tasks:
+   - name: wait for ssh server to be running
+     local_action: wait_for port=22 host="{{ inventory_hostname }}" search_regex=OpenSSH
+     
+   - name: gather facts
+     setup:
+   # The rest of the tasks go here
+```
+
+### Retrieving the IP Address from the Host
+
+Ansible retrieves the IP address of each host and stores it as a fact. Each network interface has an associated Ansible fact. Using the name of 
+the web interfaces, we can define our variables like this:
+
+```yaml
+live_hostname: "{{ ansible_eth1.ipv4.address }}.com"
+domains:
+- "{{ ansible_eth1.ipv4.address }}.com"
+- "www.{{ ansible_eth1.ipv4.address }}.com"
+```
+
+## Chapter 10: Callback Plugins<a name="Chapter10"></a>
