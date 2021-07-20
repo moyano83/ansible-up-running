@@ -1159,3 +1159,125 @@ domains:
 ```
 
 ## Chapter 10: Callback Plugins<a name="Chapter10"></a>
+
+Ansible supports a feature called callback plugins that can perform custom actions in response to Ansible events such as a play starting or a task
+completing on a host (the output you see in your terminal when you execute an Ansible playbook is implemented as a callback plugin).
+
+### Stdout Plugins
+
+A stdout plugin controls the format of the output displayed to the terminal. Only a single stdout plugin can be active at a time.
+You specify a stdout callback by setting the _stdout\_callback_ parameter in the defaults section of _ansible.cfg_, like in:
+
+```ini
+[defaults]
+stdout_callback = actionable
+```
+
+| Name | Description |
+| :--- | :---------- |
+| actionable | Show only changed or failed (makes the output less noisy) | 
+| debug | Human-readable stderr and stdout | 
+| default | Show default output | 
+| dense | Overwrite output instead of scrolling (always shows only two lines of output. It overwrites the existing lines rather than scrolling) | 
+| json | JSON output (will not generate output until the entire playbook has finished executing) | 
+| minimal | Show task results with minimal formatting | 
+| oneline | Like minimal, but on a single line | 
+| selective | Show only output for tagged tasks (shows output only for successful tasks that have the print_action tag) | 
+| skippy | Suppress output for skipped hosts |
+
+### Other Plugins
+
+The other plugins perform a variety of actions, unlike with stdout plugins, you can have multiple other plugins enabled at the same time. Set 
+_callback\_whitelist_ in _ansible.cfg_ with a comma-separated list of other plugins:
+
+```ini
+[defaults]
+callback_whitelist = mail, slack
+```
+
+| Name | Description |
+| :--- | :---------- |
+| foreman | end notifications to Foreman | 
+| hipchat | Send notifications to HipChat | 
+| jabber | Send notifications to Jabber |
+| junit | Write JUnit-formatted XML file |
+| log_plays | Log playbook results per hosts in /var/log/ansible/hosts |
+| logentries | Send notifications to Logentries |
+| logstash | Send results to Logstash |
+| mail | Send email when tasks fail |
+| osx_say | Speak notifications on macOS |
+| profile_tasks | Report execution time of individual tasks and total execution time for the playbook |
+| slack | Send notifications to Slack |
+| time | Report total execution time (better use the profile_task plugin) |
+
+#### foreman plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| FOREMAN_URL | URL to the Foreman server | http://localhost:3000 |
+| FOREMAN_SSL_CERT | X509 certificate to authenticate to Foreman if HTTPS is used | /etc/foreman/client_cert.pem |
+| FOREMAN_SSL_KEY | The corresponding private key | /etc/foreman/client_key.pem |
+| FOREMAN_SSL_VERIFY | To verify the Foreman certificate. 1 to verify using the installed CAs or to a path pointing to a CA bundle. 0 to disable | 1 |
+
+#### hipchat plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| HIPCHAT_TOKEN | HipChat API token | (None) |
+| HIPCHAT_ROOM | HipChat room to post in | ansible |
+| HIPCHAT_NAME | HipChat name to post as | ansible |
+| HIPCHAT_NOTIFY | Add notify flag to important messages | true |
+
+#### jabber plugin environment variables
+
+
+| Environment var | Description |
+| :-------------- | :---------- |
+| JABBER_SERV | Hostname of Jabber server |
+| JABBER_USER| Jabber username for auth |
+| JABBER_PASS | Jabber password auth |
+| JABBER_TO | Jabber user to send the notification to |
+
+#### junit plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| JUNIT_OUTPUT_DIR | Destination directory for files | ~/.ansible.log |
+| JUNIT_TASK_CLASS | Configure output: one class per YAML file | false |
+
+#### logentries plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| LOGENTRIES_ANSIBLE_TOKEN | Logentries token | (None) |
+| LOGENTRIES_API | Hostname of Logentries endpoint | data.logentries.com |
+| LOGENTRIES_PORT | Logentries port | 80 |
+| LOGENTRIES_TLS_PORT | Logentries TLS port | 443 |
+| LOGENTRIES_USE_TLS | Use TLS with Logentries | false |
+| LOGENTRIES_FLATTEN | Flatten results | false |
+
+#### logstash plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| LOGSTASH_SERVER | Logstash server hostname | localhost |
+| LOGSTASH_PORT | Logstash server port | 5000 |
+| LOGSTASH_TYPE | Message type | ansible |
+
+
+#### Mail plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| SMTPHOST | SMTP server hostname | localhost |
+
+#### slack plugin environment variables
+
+| Environment var | Description | Default |
+| :-------------- | :---------- | :------ |
+| SLACK_WEBHOOK_URL | Slack webhook URL | (None) |
+| SLACK_CHANNEL | Slack room to post in | #ansible |
+| SLACK_USERNAME | Username to post as | ansible |
+| SLACK_INVOCATION | Show command-line invocation details | false |
+
+## Chapter 11: Making Ansible Go Even Faster<a name="Chapter11"></a>
