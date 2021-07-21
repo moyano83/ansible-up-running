@@ -1165,8 +1165,8 @@ completing on a host (the output you see in your terminal when you execute an An
 
 ### Stdout Plugins
 
-A stdout plugin controls the format of the output displayed to the terminal. Only a single stdout plugin can be active at a time.
-You specify a stdout callback by setting the _stdout\_callback_ parameter in the defaults section of _ansible.cfg_, like in:
+A stdout plugin controls the format of the output displayed to the terminal. Only a single stdout plugin can be active at a time. You specify a stdout
+callback by setting the _stdout\_callback_ parameter in the defaults section of _ansible.cfg_, like in:
 
 ```ini
 [defaults]
@@ -1187,7 +1187,7 @@ stdout_callback = actionable
 
 ### Other Plugins
 
-The other plugins perform a variety of actions, unlike with stdout plugins, you can have multiple other plugins enabled at the same time. Set 
+The other plugins perform a variety of actions, unlike with stdout plugins, you can have multiple other plugins enabled at the same time. Set
 _callback\_whitelist_ in _ansible.cfg_ with a comma-separated list of other plugins:
 
 ```ini
@@ -1230,7 +1230,6 @@ callback_whitelist = mail, slack
 
 #### jabber plugin environment variables
 
-
 | Environment var | Description |
 | :-------------- | :---------- |
 | JABBER_SERV | Hostname of Jabber server |
@@ -1264,7 +1263,6 @@ callback_whitelist = mail, slack
 | LOGSTASH_PORT | Logstash server port | 5000 |
 | LOGSTASH_TYPE | Message type | ansible |
 
-
 #### Mail plugin environment variables
 
 | Environment var | Description | Default |
@@ -1281,3 +1279,130 @@ callback_whitelist = mail, slack
 | SLACK_INVOCATION | Show command-line invocation details | false |
 
 ## Chapter 11: Making Ansible Go Even Faster<a name="Chapter11"></a>
+
+### SSH Multiplexing and ControlPersist
+
+Because the SSH protocol runs on top of the TCP protocol, when you make a connection to a remote machine with SSH, you need to make a new TCP
+connection. The client and server have to negotiate this connection before you can actually start doing useful work. OpenSSH (most common ssh client)
+supports an optimization called SSH multiplexing, which is also referred to as _ControlPersist_. With this optimization, SSH sessions to the same host
+will share the same TCP connection, so TCP connection negotiation happens only the first time. This is possible because OpenSSH uses a live socket
+connection named _control socket_, which is user-configurable for an amount of time, usually 60 seconds.
+
+### SSH Multiplexing Options in Ansible
+
+The ControlPath /tmp/%r@%h:%p line tells SSH where to put the control Unix domain socket file on the filesystem. %h is the target hostname, %r is the
+remote login username, and %p is the port. You can check whether a master connection is open by using the -O check
+flag: `ssh -O check user@myserver.com`. Ansible's SSH multiplexing options
+
+| Option | Value |
+| :----- | :---- |
+| ControlMaster | auto |
+| ControlPath | $HOME/.ansible/cp/ansible-ssh-%h-%p-%r | 
+| ControlPersist | 60s |
+
+The operating system sets a maximum length on the path of a Unix domain socket, and if the ControlPath string is too long, then multiplexing won't
+work. This is a common occurrence when connecting to Amazon EC2 instances, because EC2 uses long hostnames. You can change this path on the
+_ansible.cfg_ config file:
+
+```ini
+[ssh_connection]
+control_path = %(directory)s/%%h-%%r
+```
+
+Ansible sets %(directory)s to $HOME/.ansible/cp, and the double percent signs (%%) are needed to escape these characters because percent signs are
+special characters for files in _.ini_ format.
+
+### Pipelining
+
+Ansible steps to execute a task are:
+
+    1. Generate a Python script based on the module being invoked
+    2. Copy the Python script to the host
+    3. Execute the Python script
+
+Ansible supports an optimization called *pipelining*, whereby it executes the Python script by piping it to the SSH session instead of copying it.
+
+#### Enabling Pipelining
+
+Pipelining is off by default, to enable it you have to change the _ansible.cfg_ config file:
+
+```ini
+[defaults]
+pipelining = True
+```
+
+#### Configuring Hosts for Pipelining
+
+Make sure that _requiretty_ is not enabled in your _/etc/sudoers_ file on your hosts. If sudo on your hosts is configured to read from
+_/etc/sudoers.d_, add a sudoers config file that disables the _requiretty_ restriction for the user you use SSH with. For example for the
+_ansible_ user create the file _disable-requiretty_ with the line `Defaults:ansible !requiretty`.
+
+### Fact Caching
+
+If your play doesn't reference any Ansible facts, you can turn off fact gathering for that play. You can disable fact gathering by default by adding
+the following to your _ansible.cfg_ file:
+
+```ini
+[defaults]
+gathering = explicit
+```
+
+If you write plays that do reference facts, you can use fact caching so that Ansible gathers facts for a host only once. If fact caching is enabled,
+Ansible will store facts in a cache the first time it connects to hosts (If you want to clear the fact cache before running a playbook, pass the
+`--flush-cache` flag to ansible-playbook). Modify the _ansible.cfg_ with:
+
+```ini
+[defaults]
+# Smart gathering tells Ansible to gather facts only if they are not present in the cache or if the cache has expired
+gathering = smart
+# 24-hour timeout, adjust if needed 
+fact_caching_timeout = 86400
+# You must specify a fact caching implementation available implementations are: JSON files, Redis and Memcached
+fact_caching = ...
+```
+
+#### JSON File Fact-Caching Backend
+
+With the JSON file fact-caching backend, Ansible will write the facts it gathers to files on your control machine. If the files are present on your
+system, it will use those files instead of connecting to the host and gathering facts. Use the _fact\_caching\_connection_ configuration option to
+specify a directory where Ansible should write the JSON files .
+
+#### Redis Fact-Caching Backend
+
+To enable fact caching by using the Redis backend, you need to install and run Redis on your control machine, install the Python Redis package and
+modify _ansible.cfg_ to enable fact caching using Redis.
+
+#### Memcached Fact-Caching Backend
+
+To use Memcached, you need to install and run Memcached on your control machine, install the Python Memcached package and modify _ansible.cfg_ to
+enable fact caching using Memcached.
+
+### Parallelism
+
+The level of parallelism that ansible uses to execute tasks is controlled by a parameter, which defaults to 5. This can be changed by setting the
+environment variable _ANSIBLE\_FORKS_ before running the playbook or by adding the following to the _ansible.cfg_ file:
+
+```ini
+[defaults]
+forks = 20
+```
+
+### Concurrent Tasks with Async
+
+Ansible introduced support for asynchronous actions with the async clause to work around the problem of SSH timeouts. Tasks marked with async are not
+blocking ansible from executing the next task defined:
+
+```yaml
+- name: clone Linus's git repo
+  git:
+    repo: git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+    dest: /home/vagrant/linux
+  async: 3600
+  poll: 0
+  register: linux_clone
+```
+
+_poll_ set to 0 is used to tell Ansible that it should immediately move on to the next task.
+
+## Chapter 12: Custom Modules<a name="Chapter12"></a>
+
