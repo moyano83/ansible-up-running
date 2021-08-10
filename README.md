@@ -1406,3 +1406,170 @@ _poll_ set to 0 is used to tell Ansible that it should immediately move on to th
 
 ## Chapter 12: Custom Modules<a name="Chapter12"></a>
 
+### Where to Put Custom Modules
+
+Ansible looks in the _library_ directory relative to the playbook.
+
+### How Ansible Invokes Modules
+
+Ansible will do the following:
+
+    1. Generate a standalone Python script with the arguments (Python modules only): Ansible will generate a self-contained Python script that 
+       injects helper code and the arguments
+    2. Copy the module to the host: Usually under ~/.ansible/<random_id>/<your_module>
+    3. Create an arguments file on the host (non-Python modules only): Usually under ~/.ansible/<random_id>/arguments
+    4. Invoke the module on the host, passing the arguments file as an argument
+    5. Parse the standard output of the module: Ansible expects modules to output JSON
+
+#### Output Variables that Ansible Expects
+
+Your module can return whatever variables you like, but Ansible has special treatment for certain returned variables.
+
+    * changed (Boolean): Should be returned by all ansible modules. a changed variable. Indicates whether the module execution caused the host to 
+      change the state. If a task has a notify clause to notify a handler, the notification will fire only if changed is true
+    * failed (Boolean): Ansible will treat a task execution as a failure if this variable is set to true and will not run any further tasks against 
+      the host that failed, unless the task has an ignore_errors or failed_when clause
+    * msg: Use the msg variable to add a descriptive message that describes the reason that a module failed
+
+### Implementing Modules in Python
+
+Ansible provides the AnsibleMod ule Python class that makes it easier to parse the inputs, return outputs in JSON format and invoke external programs.
+When writing a Python module, Ansible will inject the arguments directly into the generated Python file rather than require you to parse a separate
+arguments file.
+
+```python
+#!/usr/bin/python
+from ansible.module_utils.basic import AnsibleModule
+
+
+def my_module(arg0, arg1):
+    echo_path = module.get_bin_path('echo', required=True)
+    args = ["Output is:", arg0, str(arg1)]
+    (rc, stdout, stderr) = module.run_command(args)
+    return rc == 0
+
+
+def main():
+    module = AnsibleModule(
+        argument_spec=dict(
+            arg0=dict(required=True),
+            arg1=dict(required=True, type='int')
+        ),
+        supports_check_mode=True
+    )
+    # In check mode, we take no action. Since this module never changes system state, we just return changed=False
+    if module.check_mode:
+        module.exit_json(changed=False)
+    arg0 = module.params['arg0']
+    arg1 = module.params['arg1']
+
+    if my_module(arg0, arg1):
+        module.exit_json(changed=False)
+
+    else:
+        msg = "Could not parse %s:%s" % (arg0, arg1)
+        module.fail_json(msg=msg)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+In the example above, you can see that Ansible instantiates an _AnsibleModule_ object by passing it an _argument_spec_, which is a dictionary in which
+the keys are parameter names and the values are dictionaries that contain information about the parameters. Once you’ve declared an
+_AnsibleModule_ object, you can access the values of the arguments through the params dictionary, like:
+
+```python
+module = AnsibleModule(...)
+arg0 = module.params["arg0"]
+arg1 = module.params["arg1"]
+```
+
+#### Importing the AnsibleModule Helper Class
+
+Starting with Ansible 2.1.0, Ansible deploys a module to the host by sending a ZIP file containing the module file along with the imported helper
+files. One consequence of this it that you can now explicitly import classes with `from ansible.module_utils.basic import AnsibleModule`.
+
+#### Argument Options
+
+For each argument to an Ansible module, you can specify several options:
+
+    * required: The required option is the only option that you should always specify
+    * Default: For arguments that have required=False set, you should generally specify a default value for that option
+    * choices: The choices option allows you to restrict the allowed arguments to a predefined list
+    * aliases: The aliases option allows you to use different names to refer to the same argument
+    * type: The type option enables you to specify the type of an argument (Types supported are str, list, dict, bool, int and float). Lists are 
+      comma-delimited and dictionaries can either be key=value pairs delimited by commas, or you can use JSON inline
+
+#### AnsibleModule Initializer Parameters
+
+The AnsibleModule initializer method takes various arguments:
+
+    * argument_spec: This is a dictionary that contains the descriptions of the allowed arguments for the module
+    * no_log: When Ansible executes a module on a host, the module will log output to the syslog which can be disabled with this parameter
+    * check_invalid_arguments: Ansible will verify that all of the arguments that a user passed to a module unless this option is set to False
+    * mutually_exclusive: The mutually_exclusive parameter is a list of arguments that cannot be specified during the same module invocation
+    * required_one_of: The required_one_of parameter expects a list of arguments with at least one that must be passed to the module
+    * bypass_checks: Before a module executes, Ansible first checks that all of the argument constraints are satisfied, dissable it with this option
+    * add_file_common_args: Many modules create or modify a file and users might want to set some attributes on it, like owner, group or permissions
+
+#### Returning Success or Failure
+
+Use the _exit_json_ method to return success `module.exit_json(changed=False, msg="meaningful message")` and Use the _fail_json_ method to indicate
+failure `module.fail_json(msg="Some error")`.
+
+#### Invoking External Commands
+
+The AnsibleModule class provides the run_command convenience method for calling an external program, which wraps the native Python subprocess module.
+It accepts the following arguments:
+
+| Argument | Type | Default |  Description |
+| :------- | :--- | :------ | :----------- |
+| args (default) | String or list of strings | (None) | The command to be executed (see the following section) |
+| check_rc | Boolean | False | If true, will call fail_json if command returns a nonzero value | 
+| close_fds | Boolean | True | Passes as close_fds argument to subprocess.Popen | 
+| executable | String (path to program) | (None) | Passes as executable argument to subprocess.Popen |
+| data | String | (None) | Send to stdin if child process | 
+| binary_data | Boolean | False | If false and data is present, Ansible will send a newline to stdin after sending data |
+| path_prefix | String (list of paths) | (None) | Colon-delimited list of paths to prepend toPATHenvironment variable |
+| cwd | String (directory path) | (None) | If specified, Ansible will change to this directory before executing |
+| use_unsafe_shell | Boolean | False | When set to true, the args is passed as a single string even if there is multiple tokens |
+
+### Check Mode (Dry Run)
+
+Ansible supports something called check mode, which is enabled when passing the `-C` or `--check` flag to ansible-playbook. When Ansible runs a
+playbook in check mode, it will not make any changes to the hosts when it runs, but reports whether each task would have changed the host. To tell
+Ansible that your module supports check mode, set _supports\_check\_mode_ to true in the AnsibleModule initializer method.
+
+### Documenting Your Module
+
+You should document your modules according to the Ansible project standards so that HTML documentation for your module will be correctly generated and
+the ansible-doc program will display documentation for your module. Near the top of your module, define a string variable called _DOCUMENTATION_
+that contains the documentation, and a string variable called _EXAMPLES_ that contains example usage.
+
+### Debugging Your Module
+
+The Ansible repository in GitHub contains a couple of scripts that allow you to invoke your module directly on your local machine, without having to
+run it by using the ansible or ansible-playbook commands. Clone the Ansible repo: `git clone https://github.com/ansible/ansible.git --recursive`
+and set up your environment variables `source ansible/hacking/env-setup`. After this you can invoke your module:
+`ansible/hacking/test-module -m /path/to/my_module -a "arg0=Test arg1=12"`.
+
+### Implementing the Module in Bash
+
+You can write modules in other languages as well. For example in Bash:
+
+```bash
+#!/bin/bash
+# WANT_JSON 
+# The above 'WANT_JSON' tells Ansible that we want the input to be in JSON syntax
+
+echo $1 $2
+```
+
+### Specifying an Alternative Location for Bash
+
+Not all systems will have the Bash executable at _/bin/bash_. You can tell Ansible to look elsewhere for the Bash interpreter by setting the
+_ansible\_bash\_interpreter_ variable on hosts that install it elsewhere. You can create a host variable (_server.example.com_ in this example) by
+creating the file `host_vars/server.example.com` that contains the following `ansible_bash_interpreter: /custom_path/bash`
+
+## Chapter 13: Vagrant<a name="Chapter13"></a>
