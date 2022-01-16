@@ -2088,3 +2088,262 @@ To use Packer, you create a configuration file in JSON format (called a template
 the configuration file (Outside the scope of this tutorial).
 
 ## Chapter 15: Docker<a name="Chapter15"></a>
+
+### The Case for Pairing Docker with Ansible
+
+Ansible simplifies working with Docker in two areas. One is in the orchestration of Docker containers and the other is the creation of docker images.
+
+### Docker Application Life Cycle
+
+A typical life cycle of a Docker-based application looks like:
+
+    * Create Docker images on your local machine
+    * Push Docker images up from your local machine to the registry
+    * Pull Docker images down to your remote hosts from the registry
+    * Start up Docker containers on the remote hosts, passing in any configuration information to the containers on startup
+
+### Example Application: Ghost
+
+_Ghost_ is an open source blogging platform, similar to WordPress.
+
+### Connecting to the Docker Daemon
+
+All of the Ansible Docker modules communicate with the Docker daemon. You may need to pass extra information to the Docker modules if you are running
+on macOS using Boot2Docker or Docker Machine, or for other cases where the machine that executes the module is not the same as the machine that is
+running the Docker daemon so they can reach the Docker daemon.
+
+| Module argument | Environment variable | Default |
+| :-------------- | :------------------- | :------ |
+| docker_host | DOCKER_HOST | unix://var/run/docker.sock |
+| tls_hostname | DOCKER_TLS_HOSTNAME | localhost | 
+| api_version | DOCKER_API_VERSION | auto |
+| cert_path | DOCKER_CERT_PATH | (None) |
+| ssl_version | DOCKER_SSL_VERSION | (None) |
+| tls | DOCKER_TLS | no |
+| tls_verify| DOCKER_TLS_VERIFY | no | 
+| timeout | DOCKER_TIMEOUT | 60 (seconds) |
+
+### Running a Container on Our Local Machine
+
+The docker_container module `starts` and `stops` Docker containers, implementing some of the functionality of the docker command-line tool such as the
+`run`, `kill`, and `rm` commands. For example to start ghots in the port 8000 (usually starts on port 2368), simply run:
+`ansible localhost -m docker_container -a "name=test-ghost image=ghost ports=8000:2368"`. In the same manner, to stop the previous container, run:
+`ansible localhost -m docker_container -a "name=test-ghost state=absent"`.
+
+### Building an Image from a Dockerfile
+
+Example of building an image from a `Dockerfile` contained in a folder named _nginx_:
+
+```yaml
+- name: create Nginx image
+    docker_image:
+      name: ansiblebook/nginx-ghost
+      path: nginx
+```
+
+Invoking the docker_image module to build an image will have no effect if an image with that name already exists, even if you've made changes to the _
+Dockerfile_, unless you add the `force: yes` option or you add a tag option with a version number, and increment this each time you do a new build.
+
+### Orchestrating Multiple Containers on Our Local Machine
+
+The _docker\_service_ module can be used to control Docker Compose to bring the services up or down together:
+
+```yaml
+- name: Run Ghost locally
+  hosts: localhost
+  gather_facts: False
+  tasks:
+    - name: create Nginx image
+      docker_image:
+        name: ansiblebook/nginx-ghost
+        path: nginx
+    - name: create certs
+      command: >
+        openssl req -new -x509 -nodes
+        -out certs/nginx.crt -keyout certs/nginx.key
+        -subj '/CN=localhost' -days 3650
+        creates=certs/nginx.crt
+    - name: bring up services
+      docker_service:
+        project_src: .
+        state: present
+```
+
+### Pushing Our Image to the Docker Registry
+
+The _docker\_login_ module must be invoked first to log in to the registry before the image is to be pushed. The _docker\_login_ and _docker\_image_
+modules both default to Docker Hub as the registry unless you specify a _registry\_url_ option to _docker\_login_
+
+```yaml
+- name: publish images to docker hub
+  hosts: localhost
+  gather_facts: False
+  vars_prompt:
+    - name: username
+      prompt: Enter Docker Registry username
+    - name: email
+      prompt: Enter Docker Registry email
+    - name: password
+      prompt: Enter Docker Registry password
+      private: yes
+  tasks:
+    - name: authenticate with repository
+      docker_login:
+        username: "{{ username }}"
+        email: "{{ email }}"
+        password: "{{ password }}"
+    - name: push image up
+      docker_image:
+        name: ansiblebook/nginx-ghost
+        push: yes
+```
+
+### Querying Local Images
+
+The _docker\_image\_facts_ module allows you to query the metadata on a locally stored image:
+
+```yaml
+- name: get exposed ports and volumes
+  hosts: localhost
+  gather_facts: False
+  vars:
+    image: ghost
+  tasks:
+    - name: get image info
+      docker_image_facts: name=ghost
+      register: ghost
+    - name: extract ports
+      set_fact:
+        ports: "{{ ghost.images[0].Config.ExposedPorts.keys() }}"
+    - name: we expect only one port to be exposed
+      assert:
+        that: "ports|length == 1"
+    - name: output exposed port
+      debug:
+        msg: "Exposed port: {{ ports[0] }}"
+    - name: extract volumes
+      set_fact:
+        volumes: "{{ ghost.images[0].Config.Volumes.keys() }}"
+```
+
+### Deploying the Dockerized Application
+
+Networks replace the legacy links functionality that was previously used for connecting containers. Using Docker networks, you create a custom Docker
+network, attach containers to that network, and the containers can access each other by using the container names as hostnames:
+
+```yaml
+  name: create network
+  docker_network: name=ghostnet
+```
+
+This network can be referrenced then inside the _docker\_container_ module:
+
+```yaml
+- name: start ghost container
+  docker_container:
+    name: ghost
+    image: ghost
+    command: npm start --production
+    volumes:
+      - "{{ data_dir }}:/var/lib/ghost"
+    networks:
+      - name: "ghostnet"
+```
+
+You can remove containers and networks like this:
+
+```yaml
+ - name: remove all ghost containers and networks
+     hosts: ghost
+     become: True
+     gather_facts: False
+     tasks:
+       - name: remove containers
+         docker_container:
+           name: "ghost"
+           state: absent
+       - name: remove network
+         docker_network:
+           name: ghostnet
+           state: absent
+```
+
+### Connecting Directly to Containers
+
+Ansible has support for interacting directly with running containers. Ansible's Docker inventory plugin will automatically generate an inventory of
+accessible running hosts, and its Docker connection plugin does the equivalent of `docker exec` to execute processes in the context of a running
+container.
+
+### Ansible Container
+
+_Ansible Container_ is a tool created to simplify working with Docker images and containers, you can use it to do the following:
+
+    * Create new images (replaces Dockerfiles)
+    * Publish Docker images to registries (replaces docker push)
+    * Run Docker containers in development mode (replaces Docker Compose)
+    * Deploy to a production cloud (alternative to Docker Swarm)
+
+Ansible Container supports deploying to Kubernetes and OpenShift, although this list is likely to grow.
+
+#### The Conductor
+
+Ansible Container enables you to configure Docker images by using Ansible roles instead of Dockerfiles. When using Ansible to configure hosts, Python
+must be installed on the host. Ansible container eliminates this need by using a special container called the Conductor, and taking advantage of
+Docker's ability to mount volumes from one container to another. When you run Ansible Container, it creates a local directory named ansible-
+deployment, copies all the files that the Conductor needs, and mounts the directory from your local machine into the Conductor. Ansible Container
+mounts directories containing the Python runtime and any needed library dependencies from the Conductor container into the containers that are being
+configured. For this to work properly, the Linux distribution of the Docker container you use for the Conductor should match the Linux distribution of
+the base image of the Docker containers that you are configuring. If you don't want Ansible Container to mount the runtime from the Conductor into the
+container being configured, you can disable this behavior by passing the `--use-local-python` flag to the ansible-container command.
+
+#### Creating Docker Images
+
+##### Creating the initial files
+
+The first thing we must do is run the initialize command: `ansible-container init` This command creates a set of files in the current directory:
+ansible-requirements.txt, ansible.cfg, container.yml, meta.yml and requirements.yml.
+
+##### Creating the roles
+
+Next, we need a role that will configure our container. Create a folder named <your role> inside _roles_ and add your main.yml file to it (which will
+be used by yhe conductor). The _container.yml_ file mentioned earlier needs to be modified:
+
+```yaml
+version: "2" # Supports docker compose 2 
+settings:
+  conductor_base: debian:jessie # Base conductor image
+services: # The services field is a map whose keys are the names of the containers we are going to create.
+  ac-nginx: # Name of the conductor image
+    from: nginx
+    command: [ nginx, -g, daemon off; ] # command that will be run when the container starts up.
+    roles: # roles to be used to configure this image.
+      - ghost-nginx
+registries: { } # to specify the external registries we will push our containers to
+```
+
+To build the image, run `ansible-container build`, Ansible Container uses a _{project}-{service}_ convention for naming Docker images, with
+_{project}_ being the name of the folder you run the command. Ansible will also always create a conductor image, named _{project}-conductor_.
+
+If the build command fails with an error, you can learn more by viewing the logs generated by the Conductor container, either by using the `--debug`
+flag when invoking ansible-container or by getting the log output from Docker.
+
+##### Running Locally
+
+Ansible Container allows you to run multiple containers locally, just like Docker Compose. The _container.yml_ file is similar to the format of
+_docker-compose.yml_. You can [start|stop|delete] the containers on your local machine by executing `ansible-container [run|stop|destroy]`.
+
+##### Publishing Images to Registries
+
+Once you are satisfied with your images, you'll want to publish them to a registry so that you can deploy them. The first time you push your image,
+you need to pass your username as a command-line argument: `ansible-container push --username $YOUR_USERNAME`. You'll be prompted to enter your
+password. The first time you push an image, Ansible Container stores your credentials in _~/.docker/config.json_, and on subsequent pushes you don't
+need to specify a username or password anymore. Ansible Container allows you to specify multiple registries. To push images to only one of the
+registries, use the _--push-to_ flag: `ansible-container push --push-to <name of the registry in the configuration>`.
+
+#### Deploying Containers to Production
+
+Ansible Container has support for deploying to two container management platforms by using the `ansible-container deploy` command: OpenShift and
+Kubernetes.
+
+## Chapter 16: Debugging Ansible Playbooks<a name="Chapter16"></a>
+
