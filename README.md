@@ -2424,3 +2424,24 @@ Sometimes you don't want Ansible to run every single task in your playbook, part
       and tasks that have certain tags
     * --skip-tags <tags>: to skip plays and tasks that have certain tags
 
+## Chapter 17: Managing Windows Hosts<a name="Chapter17"></a>
+
+### Connection to Windows
+
+To add Windows support, Ansible uses the integrated Windows Remote Management (WinRM) functionality, a SOAP-based protocol. WinRM is our first
+dependency, and we need to get it covered in Python by installing the appropriate package on the managing host: `sudo pip install pywinrm`. By
+default, Ansible will try to connect by SSH to a remote machine, which is why we have to tell Ansible in advance to change the connection mechanism.
+It's a good idea to put all of our Windows hosts into an inventory group, so we can add the connection configuration into _group\_var/<group_name>_
+so all hosts of this group will inherit this configuration.
+
+### PowerShell
+
+PowerShell on Microsoft Windows is a powerful command-line interface and script‐ ing language built on top of the .NET framework and provides full
+management access not only from the local environment but also by using remote access. Ansible modules for Windows are all written in PowerShell as
+PowerShell scripts so it is expected to have at least PowerShell version 3 installed on the remote machine.
+
+### Windows Modules
+
+Ansible modules for Windows are prefixed with _win\__.
+
+## Chapter 18: Ansible for Network Devices<a name="Chapter18"></a>
