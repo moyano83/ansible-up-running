@@ -2347,3 +2347,80 @@ Kubernetes.
 
 ## Chapter 16: Debugging Ansible Playbooks<a name="Chapter16"></a>
 
+### Humane Error Messages
+
+The _debug_ callback plugin makes this output much easier for a human to read. Enable the plugin by adding the following to the defaults section of _
+ansible.cfg_:
+
+```ini
+[defaults]
+stdout_callback = debug
+```
+
+### Debugging SSH Issues
+
+Sometimes Ansible fails to make a successful SSH connection with the host. When this happens, it's helpful to see exactly what arguments Ansible is
+passing to the underlying SSH client. For this to happen, invoke ansible-playbook with the `-vvv` argument.
+
+### The Debug Module
+
+The debug module is the Ansible's version of a print statement, like in `- debug: var=myvariable`.
+
+### Playbook Debugger
+
+Ansible has support for an interactive debugger. To enable debugging, add `strategy: debug` to your play:
+
+```yaml
+- name: an example play
+  strategy: debug
+  tasks:
+  ...
+```
+
+If debugging is enabled, Ansible drops into the debugger when a task fails. You can then pass commands to this debugger:
+
+| Command | Description |
+| :------ | :------ |
+| p var | Print out the value of a supported variable | 
+| task.args[key]=value | Modify an argument for the failed task | 
+| vars[key]=value | Modify the value of a variable |
+| r | Rerun the failed task |
+| c | Continue executing the play |
+| q | Abort the play and execute the debugger | 
+| help | Show help message |
+
+This debugger has support for the following variables:
+
+| Command | Description |
+| :------ | :------ |
+| p task | The name of the task that failed |
+| p task.args | The module arguments | 
+| p result | The result returned by the failed task |
+| p vars | Value of all known variables |
+| p vars[key] | Value of one variable |
+
+### The Assert Module
+
+The _assert_ module will fail with an error if a specified condition is not met. When debugging a playbook, it can be helpful to insert assertions so
+that a failure happens as soon as any assumption you've made has been violated.
+
+### Checking Your Playbook Before Execution
+
+The ansible-playbook command supports several flags that allow you to sanity check your playbook before you execute it:
+
+    * --syntax-check: checks that your playbook's syntax is valid
+    * --list-hosts: outputs the hosts that the playbook will run against
+    * --list-tasks: outputs the tasks that the playbook will run against
+    * -C and --check: tells you whether each task in the playbook will modify the host, but does not make any changes to the server
+    * -D and -diff: output differences for any files that are changed on the remote machine
+
+### Limiting Which Tasks Run
+
+Sometimes you don't want Ansible to run every single task in your playbook, particularly when you're first writing and debugging the playbook.
+
+    * --step: With this flag, Ansible prompts you before running each task
+    * --start-at-task <taskname>: to start running the playbook at the specified task instead of at the beginning
+    * -t <tag> or --tags <tags>: Ansible allows you to add one or more tags to a task or a play, use this flag to tell Ansible to run only plays 
+      and tasks that have certain tags
+    * --skip-tags <tags>: to skip plays and tasks that have certain tags
+
