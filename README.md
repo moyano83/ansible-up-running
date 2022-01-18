@@ -2445,3 +2445,10 @@ PowerShell scripts so it is expected to have at least PowerShell version 3 insta
 Ansible modules for Windows are prefixed with _win\__.
 
 ## Chapter 18: Ansible for Network Devices<a name="Chapter18"></a>
+
+Skipped, not relevant
+
+### Chapter 19: Ansible Tower: Ansible for the Enterprise<a name="Chapter19"></a>
+
+Skipped, not relevant
+
