@@ -167,10 +167,10 @@ override the Ansible defaults for a host:
 | ansible_port | 22 | Port to SSH to |
 | ansible_user | Root | User to SSH as | 
 | ansible_password | (None) | Password to use for SSH authentication | 
-| ansible_connection | smart | How Ansible will connect to host (see the following section) | 
+| ansible_connection | smart | How Ansible will connect to host | 
 | ansible_private_key_file | (None) | SSH private key to use for SSH authentication | 
-| ansible_shell_type | sh | Shell to use for commands (see the following section) | 
-| ansible_python_interpreter | /usr/bin/ python | Python interpreter on host (see the following section) |
+| ansible_shell_type | sh | Shell to use for commands |
+| ansible_python_interpreter | /usr/bin/python | Python interpreter on host |
 | ansible_*_interpreter | (None) | Like ansible_python_interpreter for other languages |
 
 The ones that requires further explanation are:
@@ -211,7 +211,7 @@ You can override some of the behavioral parameter default values in the defaults
 
 When performing configuration tasks, we typically want to perform actions on groups of hosts, rather than on an individual host. Ansible automatically
 defines a group called _all_ (or *), which includes all of the hosts in the inventory. We can define our own groups in the inventory file. Ansible
-uses the .ini file format for inventory files. In the .ini format, configuration values are grouped together into sections.
+uses the _.ini_ file format for inventory files. In the _.ini_ format, configuration values are grouped together into sections.
 
 #### Aliases and Ports
 
@@ -267,9 +267,7 @@ separate `--host` invocation to retrieve the variables for the individual hosts.
 return a key named _\_meta_ that contains the variables for each host, in this form:
 
 ```text
-"_meta" :
-    { "hostvars" :
-        "vagrant1" : { "ansible_host": "127.0.0.1", "ansible_port": 2222, "ansible_user": "vagrant"}, ... }
+"_meta" : { "hostvars" : "vagrant1" : { "ansible_host": "127.0.0.1", "ansible_port": 2222, "ansible_user": "vagrant"}, ... }
 ```
 
 #### Breaking the Inventory into Multiple Files
@@ -396,17 +394,17 @@ be referred to as snap instead of _snap\_result.stdout_:
 
 Ansible defines several variables that are always available in a playbook:
 
-| Parameter | Description | 
-|:--- | :--- | 
-| hostvars | A dict whose keys are Ansible hostnames and values are dicts that map variable names to values | 
+| Parameter          | Description                                                                                    | 
+|:------------------ | :--------------------------------------------------------------------------------------------- | 
+| hostvars           | A dict whose keys are Ansible hostnames and values are dicts that map variable names to values | 
 | inventory_hostname | Fully qualified domain name of the current host as known by Ansible (e.g., myhost.example.com) |
-| inventory_hostname_short | Name of the current host as known by Ansible, without the domain name (e.g., myhost) | 
-| group_names | A list of all groups that the current host is a member of |
-| groups | A dict whose keys are Ansible group names and values are a list of hostnames that are members of the group. Includes all and ungrouped groups:{"all": [...], "web": [...], "ungrouped": [...]} |
+| inventory_hostname_short | Name of the current host as known by Ansible, without the domain name (e.g., myhost)     | 
+| group_names        | A list of all groups that the current host is a member of                                      |
+| groups             | A dict whose keys are Ansible group names and values are a list of hostnames that are members of the group. Includes all and ungrouped groups:{"all": [...], "web": [...], "ungrouped": [...]} |
 | ansible_check_mode | A boolean that is true when running in check mode | 
 | ansible_play_batch | A list of the inventory hostnames that are active in the current batch |
 | ansible_play_hosts | A list of all of the inventory hostnames that are active in the current play | 
-| ansible_version | A dict with Ansible version info: {"full": 2.3.1.0", "major": 2, "minor": 3, "revision": 1, "string": "2.3.1.0"} |
+| ansible_version    | A dict with Ansible version info: {"full": 2.3.1.0", "major": 2, "minor": 3, "revision": 1, "string": "2.3.1.0"} |
 
 #### hostvars
 
