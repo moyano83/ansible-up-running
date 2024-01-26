@@ -825,7 +825,7 @@ Summary of the iteration constructs available:
 
 #### with_lines
 
-The with_lines looping construct lets you run an arbitrary command on your control machine and iterate over the output, one line at a time.
+The `with_lines` looping construct lets you run an arbitrary command on your control machine and iterate over the output, one line at a time.
 
 ```yaml
 - name: Send out a slack message
@@ -839,7 +839,7 @@ The with_lines looping construct lets you run an arbitrary command on your contr
 
 #### with_fileglob
 
-The with_fileglob construct is useful for iterating over a set of files on the control machine.
+The `with_fileglob` construct is useful for iterating over a set of files on the control machine.
 
 ```yaml
 - name: add public keys to account
@@ -850,7 +850,7 @@ The with_fileglob construct is useful for iterating over a set of files on the c
 
 #### with_dict
 
-The with_dict construct lets you iterate over a dictionary instead of a list. The item loop variable is a dictionary with two keys: _key_ and _value_.
+The `with_dict` construct lets you iterate over a dictionary instead of a list. The item loop variable is a dictionary with two keys: _key_ and _value_.
 
 ```yaml
 - name: iterate over ansible_eth0
@@ -874,7 +874,7 @@ Ansible provides users with more control over loop handling.
 
 #### Setting the Variable Name
 
-The loop_var control allows us to give the iteration variable a different name than the default name, item. In the example below, we would like to
+The `loop_var` control allows us to give the iteration variable a different name than the default name, _item_. In the example below, we would like to
 loop over multiple tasks at once. One way to achieve that is to use include with `with_items`. However, the _vhosts.yml_ file that is going to be
 included may also contain `with_items` in some tasks. This would produce a conflict, as the default `loop_var` item is used for both loops at the same
 time. To prevent a naming collision, we specify a different name for `loop_var` in the outer loop (inside the _vhosts.yml_ file we can use the
