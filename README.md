@@ -850,7 +850,8 @@ The `with_fileglob` construct is useful for iterating over a set of files on the
 
 #### with_dict
 
-The `with_dict` construct lets you iterate over a dictionary instead of a list. The item loop variable is a dictionary with two keys: _key_ and _value_.
+The `with_dict` construct lets you iterate over a dictionary instead of a list. The `item` loop variable is a dictionary with two keys: _key_ and 
+_value_.
 
 ```yaml
 - name: iterate over ansible_eth0
@@ -1067,7 +1068,7 @@ run in every iteration by passing a list, like in:
 
 ```yaml
 serial:
-  -1
+  - 1
   - 30%
 ```
 
@@ -1088,7 +1089,7 @@ The _strategy_ clause on a play level gives you additional control over how Ansi
 
     * linear (default): This is the strategy in which Ansible executes one task on all hosts and waits until the task has completed or failed on 
       all hosts before it executes the next task on all hosts.
-    * Free: Ansible will not wait for results of the task to execute on all hosts. Instead, if a host com‐ pletes one task, Ansible will execute 
+    * Free: Ansible will not wait for results of the task to execute on all hosts. Instead, if a host completes one task, Ansible will execute 
       the next task on that host.
 
 ### Advanced Handlers
